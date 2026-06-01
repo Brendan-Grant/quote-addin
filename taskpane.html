@@ -393,19 +393,18 @@ async function loadFromSharePoint() {
     );
     const drivesData = await drivesRes.json();
     if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found on this site');
-    // Try to find the drive that matches the first folder in the file path
+
+    // Parse file path and find the matching drive
+    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
     const fpParts = fp.split('/').filter(Boolean);
-    const driveNameHint = fpParts[0].toLowerCase();
-    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveNameHint);
+    const driveHint = fpParts[0].toLowerCase();
+    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
     if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
     if (!drive) drive = drivesData.value[0];
-    // Remove the drive name from the path since we found the drive
-    const filePathWithoutDrive = '/' + fpParts.slice(1).join('/');
+    const fileSuffix = '/' + fpParts.slice(1).join('/');
 
-    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
-    let filePathWithoutDrive = fp;
     const fileRes = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${filePathWithoutDrive}`,
+      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`,
       { headers: { Authorization: 'Bearer ' + token } }
     );
     if (!fileRes.ok) throw new Error('File not found — check the file path');
