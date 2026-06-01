@@ -393,11 +393,19 @@ async function loadFromSharePoint() {
     );
     const drivesData = await drivesRes.json();
     if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found on this site');
-    const drive = drivesData.value[0];
+    // Try to find the drive that matches the first folder in the file path
+    const fpParts = fp.split('/').filter(Boolean);
+    const driveNameHint = fpParts[0].toLowerCase();
+    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveNameHint);
+    if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
+    if (!drive) drive = drivesData.value[0];
+    // Remove the drive name from the path since we found the drive
+    const filePathWithoutDrive = '/' + fpParts.slice(1).join('/');
 
     const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
+    let filePathWithoutDrive = fp;
     const fileRes = await fetch(
-      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fp}`,
+      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${filePathWithoutDrive}`,
       { headers: { Authorization: 'Bearer ' + token } }
     );
     if (!fileRes.ok) throw new Error('File not found — check the file path');
