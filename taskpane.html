@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Quote Builder</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="https://alcdn.msauth.net/browser/2.32.2/js/msal-browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --ms-blue: #0078D4;
+      --ms-blue-dark: #005a9e;
+      --ms-blue-light: #deecf9;
+      --ms-gray-10: #faf9f8;
+      --ms-gray-20: #f3f2f1;
+      --ms-gray-30: #edebe9;
+      --ms-gray-60: #c8c6c4;
+      --ms-gray-90: #605e5c;
+      --ms-gray-130: #323130;
+      --ms-red: #a4262c;
+      --ms-green: #107c10;
+      --radius: 4px;
+    }
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 13px;
+      color: var(--ms-gray-130);
+      background: var(--ms-gray-10);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .header {
+      background: var(--ms-blue);
+      color: #fff;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    .header-icon {
+      width: 28px; height: 28px;
+      background: rgba(255,255,255,0.2);
+      border-radius: var(--radius);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .header-title { font-size: 14px; font-weight: 600; }
+    .header-sub { font-size: 11px; opacity: 0.75; margin-top: 1px; }
+
+    #authSection { padding: 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+    .auth-info {
+      background: var(--ms-blue-light);
+      border: 1px solid #b3d6f2;
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 12px;
+      color: var(--ms-blue-dark);
+      line-height: 1.5;
+    }
+
+    #mainSection { display: none; flex: 1; overflow: hidden; flex-direction: column; }
+
+    .toolbar {
+      background: #fff;
+      border-bottom: 1px solid var(--ms-gray-30);
+      padding: 8px 12px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .toolbar-label { font-size: 11px; color: var(--ms-gray-90); flex-shrink: 0; }
+    .search-box { flex: 1; position: relative; }
+    .search-box input {
+      width: 100%;
+      height: 28px;
+      border: 1px solid var(--ms-gray-60);
+      border-radius: var(--radius);
+      padding: 0 8px 0 28px;
+      font-size: 12px;
+      font-family: inherit;
+      outline: none;
+      background: #fff;
+      color: var(--ms-gray-130);
+    }
+    .search-box input:focus { border-color: var(--ms-blue); }
+    .search-icon {
+      position: absolute; left: 8px; top: 50%;
+      transform: translateY(-50%);
+      color: var(--ms-gray-90); font-size: 13px; pointer-events: none;
+    }
+
+    #itemContainer { flex: 1; overflow-y: auto; background: #fff; }
+
+    .list-header {
+      display: grid;
+      grid-template-columns: 24px 90px 1fr 76px;
+      gap: 6px;
+      padding: 6px 10px;
+      background: var(--ms-gray-20);
+      border-bottom: 1px solid var(--ms-gray-30);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--ms-gray-90);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      position: sticky; top: 0; z-index: 1;
+    }
+
+    .item-row {
+      display: grid;
+      grid-template-columns: 24px 90px 1fr 76px;
+      gap: 6px;
+      padding: 7px 10px;
+      border-bottom: 1px solid var(--ms-gray-30);
+      cursor: pointer;
+      align-items: center;
+      transition: background 0.1s;
+    }
+    .item-row:hover { background: var(--ms-gray-10); }
+    .item-row.selected { background: var(--ms-blue-light); }
+    .item-row.selected:hover { background: #cce3f5; }
+
+    .item-check {
+      width: 16px; height: 16px;
+      border: 1.5px solid var(--ms-gray-60);
+      border-radius: 2px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .item-row.selected .item-check { background: var(--ms-blue); border-color: var(--ms-blue); }
+    .item-row.selected .item-check::after {
+      content: '';
+      width: 9px; height: 5px;
+      border-left: 2px solid #fff;
+      border-bottom: 2px solid #fff;
+      transform: rotate(-45deg) translateY(-1px);
+    }
+
+    .item-model { font-size: 11px; font-weight: 600; color: var(--ms-blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .item-desc { font-size: 11px; color: var(--ms-gray-130); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .item-price { font-size: 11px; font-weight: 600; text-align: right; color: var(--ms-gray-130); }
+
+    .empty-msg { padding: 32px 16px; text-align: center; color: var(--ms-gray-90); font-size: 12px; line-height: 1.7; }
+
+    .footer {
+      background: #fff;
+      border-top: 1px solid var(--ms-gray-30);
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    .footer-info { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--ms-gray-90); }
+    .sel-count { font-weight: 600; color: var(--ms-blue); }
+    .clear-btn { background: none; border: none; color: var(--ms-gray-90); cursor: pointer; font-size: 11px; font-family: inherit; text-decoration: underline; padding: 0; }
+    .clear-btn:hover { color: var(--ms-red); }
+
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      height: 32px; border-radius: var(--radius);
+      font-size: 13px; font-family: inherit; font-weight: 600;
+      cursor: pointer; border: 1px solid transparent;
+      transition: background 0.12s; width: 100%;
+    }
+    .btn-primary { background: var(--ms-blue); color: #fff; border-color: var(--ms-blue-dark); }
+    .btn-primary:hover { background: var(--ms-blue-dark); }
+    .btn-primary:disabled { background: var(--ms-gray-30); border-color: var(--ms-gray-60); color: var(--ms-gray-90); cursor: not-allowed; }
+    .btn-secondary { background: #fff; color: var(--ms-gray-130); border-color: var(--ms-gray-60); }
+    .btn-secondary:hover { background: var(--ms-gray-10); }
+    .btn-sm { height: 28px; font-size: 11px; font-weight: 400; width: auto; padding: 0 10px; }
+
+    .status-bar { padding: 4px 12px; font-size: 11px; min-height: 22px; flex-shrink: 0; }
+    .status-bar.success { color: var(--ms-green); }
+    .status-bar.error { color: var(--ms-red); }
+    .status-bar.info { color: var(--ms-gray-90); }
+    .status-bar.loading { color: var(--ms-blue); }
+
+    #configPanel { display: none; background: var(--ms-gray-10); border-top: 1px solid var(--ms-gray-30); padding: 12px 14px; flex-shrink: 0; }
+    #configPanel.open { display: block; }
+    .config-title { font-size: 12px; font-weight: 600; margin-bottom: 8px; }
+    .field { margin-bottom: 8px; }
+    .field label { display: block; font-size: 11px; font-weight: 600; margin-bottom: 3px; color: var(--ms-gray-90); }
+    .field input { width: 100%; height: 28px; border: 1px solid var(--ms-gray-60); border-radius: var(--radius); padding: 0 8px; font-size: 12px; font-family: inherit; color: var(--ms-gray-130); background: #fff; outline: none; }
+    .field input:focus { border-color: var(--ms-blue); }
+    .field .hint { font-size: 10px; color: var(--ms-gray-90); margin-top: 2px; }
+    .btn-row { display: flex; gap: 6px; }
+    .btn-row .btn { width: auto; padding: 0 14px; }
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">📋</div>
+  <div>
+    <div class="header-title">Quote Builder</div>
+    <div class="header-sub">Select items → insert into email</div>
+  </div>
+</div>
+
+<!-- Auth -->
+<div id="authSection">
+  <div class="auth-info">
+    Sign in with your Microsoft 365 account to load your SharePoint price list.
+  </div>
+  <button class="btn btn-primary" onclick="signIn()">
+    Sign in with Microsoft 365
+  </button>
+</div>
+
+<!-- Main -->
+<div id="mainSection">
+  <div class="toolbar">
+    <span class="toolbar-label" id="fileLabel">Price list</span>
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="searchInput" placeholder="Search model or description…" oninput="filterItems()"/>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="toggleConfig()" title="Configure SharePoint file">⚙ Config</button>
+  </div>
+
+  <!-- SharePoint config -->
+  <div id="configPanel">
+    <div class="config-title">⚙ SharePoint Price File Settings</div>
+    <div class="field">
+      <label>SharePoint site URL</label>
+      <input type="text" id="spSiteUrl" placeholder="https://yourcompany.sharepoint.com/sites/Sales"/>
+      <div class="hint">The SharePoint site where your price Excel file lives</div>
+    </div>
+    <div class="field">
+      <label>File path</label>
+      <input type="text" id="spFilePath" placeholder="/Shared Documents/Pricing/pricelist.xlsx"/>
+      <div class="hint">Path from the site root to your Excel file</div>
+    </div>
+    <div class="field">
+      <label>Column names (Model, Description, Price)</label>
+      <input type="text" id="colMapping" placeholder="Model No,Description,Net Price" value="Model No,Description,Net Price"/>
+      <div class="hint">Exact column header names in your Excel file, comma-separated</div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="loadFromSharePoint()">Load price list</button>
+      <button class="btn btn-secondary" onclick="saveConfig()">Save settings</button>
+    </div>
+  </div>
+
+  <div class="list-header">
+    <span></span><span>Model #</span><span>Description</span><span style="text-align:right">Net Price</span>
+  </div>
+
+  <div id="itemContainer">
+    <div class="empty-msg" id="emptyMsg">
+      Click <strong>⚙ Config</strong> above,<br>enter your SharePoint file details,<br>then click <strong>Load price list</strong>.
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-info">
+      <span>Selected: <span class="sel-count" id="selCount">0</span></span>
+      <button class="clear-btn" onclick="clearAll()">Clear selection</button>
+    </div>
+    <button class="btn btn-primary" id="insertBtn" onclick="insertQuote()" disabled>
+      ↳ Insert quote table into email
+    </button>
+  </div>
+</div>
+
+<div class="status-bar info" id="statusBar"></div>
+
+<script>
+/* ─── Azure / MSAL config ─── */
+const MSAL_CLIENT_ID = 'd4983e87-18e7-4d88-98d7-d8197013847f';
+
+const msalConfig = {
+  auth: {
+    clientId: MSAL_CLIENT_ID,
+    authority: 'https://login.microsoftonline.com/common',
+    redirectUri: window.location.href.split('?')[0]
+  },
+  cache: { cacheLocation: 'sessionStorage' }
+};
+
+const GRAPH_SCOPES = ['Files.Read', 'Sites.Read.All'];
+let msalInstance;
+let allItems = [];
+let filteredItems = [];
+let selectedModels = new Set();
+
+/* ─── Init ─── */
+Office.onReady(() => {
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  loadSavedConfig();
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    showMain();
+    autoLoad();
+  }
+});
+
+/* ─── Auth ─── */
+async function signIn() {
+  try {
+    setStatus('Opening Microsoft sign-in…', 'loading');
+    await msalInstance.loginPopup({ scopes: GRAPH_SCOPES });
+    showMain();
+    setStatus('Signed in ✓', 'success');
+    autoLoad();
+  } catch (e) {
+    setStatus('Sign-in failed: ' + e.message, 'error');
+  }
+}
+
+async function getToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) throw new Error('Not signed in');
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
+    return r.accessToken;
+  } catch {
+    const r = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+    return r.accessToken;
+  }
+}
+
+function showMain() {
+  document.getElementById('authSection').style.display = 'none';
+  document.getElementById('mainSection').style.display = 'flex';
+}
+
+/* ─── Config ─── */
+function saveConfig() {
+  const cfg = {
+    siteUrl: document.getElementById('spSiteUrl').value.trim(),
+    filePath: document.getElementById('spFilePath').value.trim(),
+    colMapping: document.getElementById('colMapping').value.trim()
+  };
+  localStorage.setItem('quoteAddinConfig', JSON.stringify(cfg));
+  setStatus('Settings saved ✓', 'success');
+  if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
+}
+
+function loadSavedConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('quoteAddinConfig') || '{}');
+    if (cfg.siteUrl) document.getElementById('spSiteUrl').value = cfg.siteUrl;
+    if (cfg.filePath) document.getElementById('spFilePath').value = cfg.filePath;
+    if (cfg.colMapping) document.getElementById('colMapping').value = cfg.colMapping;
+  } catch {}
+}
+
+function autoLoad() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('quoteAddinConfig') || '{}');
+    if (cfg.siteUrl && cfg.filePath) loadFromSharePoint();
+    else toggleConfig();
+  } catch { toggleConfig(); }
+}
+
+function toggleConfig() {
+  document.getElementById('configPanel').classList.toggle('open');
+}
+
+/* ─── SharePoint / Graph ─── */
+async function loadFromSharePoint() {
+  const siteUrl  = document.getElementById('spSiteUrl').value.trim();
+  const filePath = document.getElementById('spFilePath').value.trim();
+  const colMapping = document.getElementById('colMapping').value.trim();
+  if (!siteUrl || !filePath) { setStatus('Please enter SharePoint URL and file path', 'error'); return; }
+
+  try {
+    setStatus('Connecting to SharePoint…', 'loading');
+    const token = await getToken();
+
+    const hostname = new URL(siteUrl).hostname;
+    const sitePath = new URL(siteUrl).pathname;
+
+    const siteRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!siteRes.ok) throw new Error('SharePoint site not found — check your URL');
+    const siteData = await siteRes.json();
+
+    setStatus('Locating file…', 'loading');
+    const drivesRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    const drivesData = await drivesRes.json();
+    if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found on this site');
+    const drive = drivesData.value[0];
+
+    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
+    const fileRes = await fetch(
+      `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fp}`,
+      { headers: { Authorization: 'Bearer ' + token } }
+    );
+    if (!fileRes.ok) throw new Error('File not found — check the file path');
+    const fileData = await fileRes.json();
+
+    setStatus('Downloading price list…', 'loading');
+    const contentRes = await fetch(fileData['@microsoft.graph.downloadUrl']);
+    const buffer = await contentRes.arrayBuffer();
+    parseExcel(buffer, colMapping);
+    saveConfig();
+
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
+  }
+}
+
+/* ─── Excel parsing ─── */
+function parseExcel(buffer, colMapping) {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const [mCol, dCol, pCol] = colMapping.split(',').map(s => s.trim());
+
+  allItems = [];
+  for (const row of rows) {
+    const model = String(row[mCol] || '').trim();
+    const desc  = String(row[dCol] || '').trim();
+    const price = parseFloat(String(row[pCol] || '').replace(/[$,\s]/g, ''));
+    if (model && !isNaN(price)) allItems.push({ model, desc, price });
+  }
+
+  selectedModels.clear();
+  filteredItems = [...allItems];
+  renderList();
+  document.getElementById('fileLabel').textContent = `${allItems.length} items loaded`;
+  setStatus(`✓ Loaded ${allItems.length} items from SharePoint`, 'success');
+  if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
+}
+
+/* ─── List rendering ─── */
+function filterItems() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  filteredItems = !q ? [...allItems]
+    : allItems.filter(it => it.model.toLowerCase().includes(q) || it.desc.toLowerCase().includes(q));
+  renderList();
+}
+
+function renderList() {
+  const container = document.getElementById('itemContainer');
+  const emptyMsg  = document.getElementById('emptyMsg');
+  container.querySelectorAll('.item-row').forEach(r => r.remove());
+
+  if (!filteredItems.length) {
+    emptyMsg.style.display = 'block';
+    emptyMsg.innerHTML = allItems.length
+      ? 'No items match your search'
+      : 'Click <strong>⚙ Config</strong> above,<br>enter your SharePoint file details,<br>then click <strong>Load price list</strong>.';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+
+  const frag = document.createDocumentFragment();
+  for (const item of filteredItems) {
+    const sel = selectedModels.has(item.model);
+    const row = document.createElement('div');
+    row.className = 'item-row' + (sel ? ' selected' : '');
+    row.setAttribute('role', 'checkbox');
+    row.setAttribute('aria-checked', sel);
+    row.setAttribute('tabindex', '0');
+    row.dataset.model = item.model;
+    row.innerHTML = `
+      <div class="item-check"></div>
+      <div class="item-model" title="${esc(item.model)}">${esc(item.model)}</div>
+      <div class="item-desc"  title="${esc(item.desc)}">${esc(item.desc || '—')}</div>
+      <div class="item-price">$${item.price.toFixed(2)}</div>`;
+    row.addEventListener('click', () => toggleItem(item.model));
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') toggleItem(item.model); });
+    frag.appendChild(row);
+  }
+  container.appendChild(frag);
+  updateSelCount();
+}
+
+function toggleItem(model) {
+  selectedModels.has(model) ? selectedModels.delete(model) : selectedModels.add(model);
+  const row = document.querySelector(`.item-row[data-model="${CSS.escape(model)}"]`);
+  if (row) {
+    row.classList.toggle('selected', selectedModels.has(model));
+    row.setAttribute('aria-checked', selectedModels.has(model));
+  }
+  updateSelCount();
+}
+
+function clearAll() {
+  selectedModels.clear();
+  document.querySelectorAll('.item-row.selected').forEach(r => {
+    r.classList.remove('selected');
+    r.setAttribute('aria-checked', false);
+  });
+  updateSelCount();
+}
+
+function updateSelCount() {
+  const n = selectedModels.size;
+  document.getElementById('selCount').textContent = n;
+  document.getElementById('insertBtn').disabled = n === 0;
+}
+
+/* ─── Quote insertion into email ─── */
+function buildHtmlTable(items) {
+  const rows = items.map(it => `
+    <tr>
+      <td style="padding:7px 12px;border-bottom:1px solid #e0e0e0;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:700;color:#0078D4;white-space:nowrap">${esc(it.model)}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e0e0e0;font-family:Calibri,Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc || '')}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid #e0e0e0;font-family:Calibri,Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td>
+    </tr>`).join('');
+
+  return `<table style="border-collapse:collapse;width:100%;max-width:620px;font-family:Calibri,Arial,sans-serif;margin:12px 0">
+  <thead>
+    <tr style="background:#0078D4">
+      <th style="padding:9px 12px;text-align:left;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap">MODEL #</th>
+      <th style="padding:9px 12px;text-align:left;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:0.06em">DESCRIPTION</th>
+      <th style="padding:9px 12px;text-align:right;color:#ffffff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap">NET PRICE</th>
+    </tr>
+  </thead>
+  <tbody>${rows}
+  </tbody>
+</table>`;
+}
+
+function insertQuote() {
+  const items = allItems.filter(it => selectedModels.has(it.model));
+  if (!items.length) return;
+  const tableHtml = buildHtmlTable(items);
+  setStatus('Inserting into email…', 'loading');
+
+  Office.context.mailbox.item.body.setSelectedDataAsync(
+    tableHtml,
+    { coercionType: Office.CoercionType.Html },
+    result => {
+      if (result.status === Office.AsyncResultStatus.Succeeded) {
+        setStatus(`✓ Inserted ${items.length} item${items.length > 1 ? 's' : ''} into your email`, 'success');
+      } else {
+        // Fallback: append to body
+        Office.context.mailbox.item.body.getAsync('html', r => {
+          const existing = r.value || '';
+          Office.context.mailbox.item.body.setAsync(
+            existing + tableHtml,
+            { coercionType: Office.CoercionType.Html },
+            r2 => {
+              if (r2.status === Office.AsyncResultStatus.Succeeded)
+                setStatus(`✓ Inserted ${items.length} item${items.length > 1 ? 's' : ''} into your email`, 'success');
+              else
+                setStatus('Insert failed: ' + r2.error.message, 'error');
+            }
+          );
+        });
+      }
+    }
+  );
+}
+
+/* ─── Helpers ─── */
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function setStatus(msg, type) {
+  const bar = document.getElementById('statusBar');
+  bar.textContent = msg;
+  bar.className = 'status-bar ' + (type || 'info');
+}
+</script>
+</body>
+</html>
