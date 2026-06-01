@@ -279,8 +279,8 @@ const MSAL_CLIENT_ID = 'd4983e87-18e7-4d88-98d7-d8197013847f';
 const msalConfig = {
   auth: {
     clientId: MSAL_CLIENT_ID,
-    authority: 'https://login.microsoftonline.com/common',
-    redirectUri: window.location.href.split('?')[0]
+    authority: 'https://login.microsoftonline.com/2e5119eb-1ed3-4a64-87cd-6248337c7dbd',
+    redirectUri: 'https://brendan-grant.github.io/quote-addin/taskpane.html'
   },
   cache: { cacheLocation: 'sessionStorage' }
 };
@@ -292,8 +292,9 @@ let filteredItems = [];
 let selectedModels = new Set();
 
 /* ─── Init ─── */
-Office.onReady(() => {
+Office.onReady(async () => {
   msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.handleRedirectPromise();
   loadSavedConfig();
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
@@ -306,7 +307,7 @@ Office.onReady(() => {
 async function signIn() {
   try {
     setStatus('Opening Microsoft sign-in…', 'loading');
-    await msalInstance.loginPopup({ scopes: GRAPH_SCOPES });
+    await msalInstance.loginRedirect({ scopes: GRAPH_SCOPES }); return;
     showMain();
     setStatus('Signed in ✓', 'success');
     autoLoad();
@@ -322,8 +323,7 @@ async function getToken() {
     const r = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
     return r.accessToken;
   } catch {
-    const r = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
-    return r.accessToken;
+    await msalInstance.acquireTokenRedirect({ scopes: GRAPH_SCOPES }); return null;
   }
 }
 
