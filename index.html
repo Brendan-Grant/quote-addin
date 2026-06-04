@@ -72,8 +72,7 @@
 </div>
 
 <div id="authSection">
-  <div class="auth-info">Sign in with your Microsoft 365 account to load your SharePoint price list.</div>
-  <button class="btn btn-primary" id="signInBtn">Sign in with Microsoft 365</button>
+  <div class="auth-info" id="authMsg">Connecting to Microsoft 365…</div>
 </div>
 
 <div id="mainSection">
@@ -138,10 +137,31 @@ Office.onReady(async () => {
     cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
   });
   await msalInstance.initialize();
-  document.getElementById('signInBtn').addEventListener('click', signIn);
   loadSavedConfig();
+
+  // Try silent sign-in first
   const accounts = msalInstance.getAllAccounts();
-  if (accounts.length > 0) { showMain(); autoLoad(); }
+  if (accounts.length > 0) {
+    showMain();
+    autoLoad();
+    return;
+  }
+
+  // Try silent SSO with logged-in browser session
+  try {
+    setAuthMsg('Signing in automatically…');
+    const result = await msalInstance.ssoSilent({ scopes: SCOPES, loginHint: '' });
+    if (result) { showMain(); autoLoad(); return; }
+  } catch(e) {
+    // Silent failed - try popup
+    try {
+      setAuthMsg('Sign-in required — opening window…');
+      const result = await msalInstance.loginPopup({ scopes: SCOPES });
+      if (result) { showMain(); autoLoad(); }
+    } catch(e2) {
+      setAuthMsg('Sign-in failed: ' + e2.message);
+    }
+  }
 });
 
 async function signIn() {
@@ -152,6 +172,11 @@ async function signIn() {
   } catch(e) {
     setStatus('Sign-in failed: ' + e.message, 'error');
   }
+}
+
+function setAuthMsg(msg) {
+  const el = document.getElementById('authMsg');
+  if (el) el.textContent = msg;
 }
 
 async function getToken() {
