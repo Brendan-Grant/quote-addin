@@ -324,7 +324,13 @@ async function getToken() {
     const r = await msalInstance.acquireTokenSilent({ scopes: GRAPH_SCOPES, account: accounts[0] });
     return r.accessToken;
   } catch {
-    await msalInstance.acquireTokenRedirect({ scopes: GRAPH_SCOPES }); return null;
+    const inIframe = window.parent !== window;
+    if (inIframe) {
+      const r = await msalInstance.acquireTokenPopup({ scopes: GRAPH_SCOPES });
+      return r.accessToken;
+    } else {
+      await msalInstance.acquireTokenRedirect({ scopes: GRAPH_SCOPES }); return null;
+    }
   }
 }
 
