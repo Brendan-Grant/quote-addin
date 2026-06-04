@@ -8,7 +8,7 @@
   <Description DefaultValue="Select items from your price list and insert a formatted quote table into your email."/>
   <IconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-128.png"/>
-  <SupportUrl DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/taskpane.html"/>
+  <SupportUrl DefaultValue="https://brendan-grant.github.io/quote-addin/"/>
   <AppDomains>
     <AppDomain>https://grantmail.sharepoint.com</AppDomain>
   </AppDomains>
@@ -23,7 +23,7 @@
   <FormSettings>
     <Form xsi:type="ItemEdit">
       <DesktopSettings>
-        <SourceLocation DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/taskpane.html"/>
+        <SourceLocation DefaultValue="https://brendan-grant.github.io/quote-addin/"/>
       </DesktopSettings>
     </Form>
   </FormSettings>
@@ -74,7 +74,7 @@
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/commands.html"/>
-        <bt:Url id="Taskpane.Url" DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/taskpane.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://brendan-grant.github.io/quote-addin/"/>
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="Quote Builder"/>
