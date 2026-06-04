@@ -282,10 +282,10 @@ const msalConfig = {
     authority: 'https://login.microsoftonline.com/2e5119eb-1ed3-4a64-87cd-6248337c7dbd',
     redirectUri: 'https://brendan-grant.github.io/quote-addin/taskpane.html'
   },
-  cache: { cacheLocation: 'sessionStorage' }
+  cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
 };
 
-const GRAPH_SCOPES = ['Files.Read', 'Sites.Read.All'];
+const GRAPH_SCOPES = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/Sites.Read.All'];
 let msalInstance;
 let allItems = [];
 let filteredItems = [];
@@ -294,7 +294,8 @@ let selectedModels = new Set();
 /* ─── Init ─── */
 Office.onReady(async () => {
   msalInstance = new msal.PublicClientApplication(msalConfig);
-  await msalInstance.handleRedirectPromise();
+  const redirectResult = await msalInstance.handleRedirectPromise();
+  if (redirectResult) { showMain(); loadSavedConfig(); autoLoad(); return; }
   loadSavedConfig();
   const accounts = msalInstance.getAllAccounts();
   if (accounts.length > 0) {
@@ -393,8 +394,6 @@ async function loadFromSharePoint() {
     );
     const drivesData = await drivesRes.json();
     if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found on this site');
-
-    // Parse file path and find the matching drive
     const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
     const fpParts = fp.split('/').filter(Boolean);
     const driveHint = fpParts[0].toLowerCase();
@@ -402,7 +401,6 @@ async function loadFromSharePoint() {
     if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
     if (!drive) drive = drivesData.value[0];
     const fileSuffix = '/' + fpParts.slice(1).join('/');
-
     const fileRes = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`,
       { headers: { Authorization: 'Bearer ' + token } }
