@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Quote Builder"/>
+  <title>Quote Builder</title>
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+    html,body{height:100%;overflow:hidden}
+    body{font-family:-apple-system,"Segoe UI",sans-serif;font-size:15px;color:#1A2C44;background:#f5f5f5;display:flex;flex-direction:column}
+
+    .header{background:#1A2C44;color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;padding-top:env(safe-area-inset-top,14px)}
+    .header-icon{width:32px;height:32px;background:rgba(255,255,255,0.15);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
+    .header-title{font-size:17px;font-weight:600}
+    .header-sub{font-size:12px;opacity:0.7;margin-top:1px}
+
+    #authSection{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;gap:16px}
+    .auth-info{background:#eef3f8;border:1px solid #cfe0ef;border-radius:10px;padding:16px;font-size:14px;color:#1A2C44;line-height:1.5;text-align:center;max-width:320px}
+    .btn{display:flex;align-items:center;justify-content:center;gap:8px;height:48px;border-radius:10px;font-size:16px;font-family:inherit;font-weight:600;cursor:pointer;border:1px solid transparent;width:100%;max-width:320px;-webkit-appearance:none}
+    .btn-primary{background:#1A2C44;color:#fff}
+    .btn-primary:active{background:#101c2e}
+    .btn-primary:disabled{background:#d0d0d0;color:#888}
+    .btn-secondary{background:#fff;color:#1A2C44;border-color:#c8c6c4}
+
+    #mainSection{display:none;flex:1;overflow:hidden;flex-direction:column}
+
+    .toolbar{background:#fff;border-bottom:1px solid #e5e5e5;padding:10px 12px;display:flex;gap:8px;align-items:center;flex-shrink:0}
+    .search-wrap{flex:1;position:relative}
+    .search-wrap input{width:100%;height:40px;border:1px solid #d0d0d0;border-radius:10px;padding:0 12px;font-size:15px;font-family:inherit;outline:none;background:#f5f5f5}
+    .search-wrap input:focus{border-color:#1A2C44;background:#fff}
+    .cfg-btn{background:#f0f0f0;border:none;border-radius:10px;height:40px;width:40px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+
+    #itemContainer{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#fff}
+    .item-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid #eee;cursor:pointer}
+    .item-row.selected{background:#eef3f8}
+    .item-check{width:22px;height:22px;border:2px solid #c8c6c4;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+    .item-row.selected .item-check{background:#1A2C44;border-color:#1A2C44}
+    .item-row.selected .item-check::after{content:'';width:10px;height:6px;border-left:2px solid #fff;border-bottom:2px solid #fff;transform:rotate(-45deg) translateY(-1px)}
+    .item-text{flex:1;min-width:0}
+    .item-model{font-size:14px;font-weight:700;color:#1A2C44}
+    .item-desc{font-size:13px;color:#555;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .item-price{font-size:15px;font-weight:700;color:#1A2C44;flex-shrink:0}
+
+    .empty-msg{padding:40px 20px;text-align:center;color:#888;font-size:14px;line-height:1.7}
+
+    .footer{background:#fff;border-top:1px solid #e5e5e5;padding:12px 14px;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px;flex-shrink:0}
+    .footer-info{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#666}
+    .sel-count{font-weight:700;color:#1A2C44}
+    .clear-btn{background:none;border:none;color:#888;font-size:13px;text-decoration:underline}
+
+    #configPanel{display:none;position:fixed;inset:0;background:#fff;z-index:50;flex-direction:column;padding-top:env(safe-area-inset-top,0px)}
+    #configPanel.open{display:flex}
+    .config-header{padding:14px 16px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+    .config-header h2{font-size:17px;font-weight:600}
+    .config-close{font-size:20px;color:#888;background:none;border:none}
+    .config-body{flex:1;overflow-y:auto;padding:16px}
+    .field{margin-bottom:16px}
+    .field label{display:block;font-size:13px;font-weight:600;margin-bottom:6px;color:#444}
+    .field input{width:100%;height:44px;border:1px solid #d0d0d0;border-radius:10px;padding:0 12px;font-size:15px;font-family:inherit;outline:none}
+    .field input:focus{border-color:#1A2C44}
+    .field .hint{font-size:12px;color:#888;margin-top:4px}
+    .config-footer{padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid #eee;display:flex;flex-direction:column;gap:10px}
+
+    .status-bar{padding:8px 14px;font-size:13px;text-align:center;flex-shrink:0}
+    .status-bar.success{color:#107c10;background:#f0f9f0}
+    .status-bar.error{color:#a4262c;background:#fdf0f0}
+    .status-bar.info{color:#666}
+    .status-bar.loading{color:#1A2C44}
+
+    #quoteSheet{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:60;align-items:flex-end}
+    #quoteSheet.open{display:flex}
+    .sheet-content{background:#fff;border-radius:16px 16px 0 0;width:100%;max-height:80vh;display:flex;flex-direction:column;padding-bottom:env(safe-area-inset-bottom,0px)}
+    .sheet-handle{width:36px;height:4px;background:#ddd;border-radius:2px;margin:10px auto}
+    .sheet-header{padding:8px 16px 14px;border-bottom:1px solid #eee}
+    .sheet-header h2{font-size:17px;font-weight:600}
+    .sheet-body{flex:1;overflow-y:auto;padding:14px 16px}
+    .sheet-table{width:100%;border-collapse:collapse;font-size:13px}
+    .sheet-table th{text-align:left;padding:6px 4px;border-bottom:2px solid #1A2C44;font-size:11px;text-transform:uppercase;color:#666}
+    .sheet-table td{padding:8px 4px;border-bottom:1px solid #eee}
+    .sheet-footer{padding:14px 16px;padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));border-top:1px solid #eee;display:flex;flex-direction:column;gap:8px}
+    textarea#copyTarget{position:absolute;left:-9999px}
+  </style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">📋</div>
+  <div>
+    <div class="header-title">Quote Builder</div>
+    <div class="header-sub">Tap items, then copy your quote</div>
+  </div>
+</div>
+
+<div id="authSection">
+  <div class="auth-info">Sign in with your Microsoft 365 account to load the price list.</div>
+  <button class="btn btn-primary" id="signInBtn">Sign in with Microsoft 365</button>
+</div>
+
+<div id="mainSection">
+  <div class="toolbar">
+    <div class="search-wrap">
+      <input type="text" id="searchInput" placeholder="Search model or description…" oninput="filterItems()"/>
+    </div>
+    <button class="cfg-btn" onclick="toggleConfig()">⚙</button>
+  </div>
+  <div id="itemContainer">
+    <div class="empty-msg" id="emptyMsg">Tap ⚙ to set up your price list,<br>then it will load automatically.</div>
+  </div>
+  <div class="footer">
+    <div class="footer-info">
+      <span><span class="sel-count" id="selCount">0</span> selected</span>
+      <button class="clear-btn" onclick="clearAll()">Clear</button>
+    </div>
+    <button class="btn btn-primary" id="viewQuoteBtn" onclick="openQuoteSheet()" disabled>View & Copy Quote</button>
+  </div>
+</div>
+
+<div id="configPanel">
+  <div class="config-header">
+    <h2>⚙ Price List Settings</h2>
+    <button class="config-close" onclick="toggleConfig()">✕</button>
+  </div>
+  <div class="config-body">
+    <div class="field">
+      <label>SharePoint site URL</label>
+      <input type="text" id="spSiteUrl" value="https://grantmail.sharepoint.com/sites/inside"/>
+    </div>
+    <div class="field">
+      <label>File path</label>
+      <input type="text" id="spFilePath" value="/Documents/2026 Price Sheets/Outlook add in/MASTER PRICE FILE.xlsx"/>
+    </div>
+    <div class="field">
+      <label>Column names (Model, Description, Price)</label>
+      <input type="text" id="colMapping" value="Model,Description,Price"/>
+      <div class="hint">Exact column header names in your Excel file, comma-separated</div>
+    </div>
+  </div>
+  <div class="config-footer">
+    <button class="btn btn-primary" onclick="loadFromSharePoint()">Load price list</button>
+    <button class="btn btn-secondary" onclick="saveConfig()">Save settings</button>
+  </div>
+</div>
+
+<div id="quoteSheet">
+  <div class="sheet-content">
+    <div class="sheet-handle"></div>
+    <div class="sheet-header"><h2>Your Quote</h2></div>
+    <div class="sheet-body">
+      <table class="sheet-table" id="quoteTable">
+        <thead><tr><th>Model</th><th>Description</th><th style="text-align:right">Price</th></tr></thead>
+        <tbody id="quoteTableBody"></tbody>
+      </table>
+    </div>
+    <div class="sheet-footer">
+      <button class="btn btn-primary" onclick="copyQuote()">📋 Copy Quote Table</button>
+      <button class="btn btn-secondary" onclick="closeQuoteSheet()">Close</button>
+    </div>
+  </div>
+</div>
+
+<textarea id="copyTarget" readonly></textarea>
+<div class="status-bar info" id="statusBar"></div>
+
+<script>
+const CLIENT_ID = 'd4983e87-18e7-4d88-98d7-d8197013847f';
+const TENANT_ID = '2e5119eb-1ed3-4a64-87cd-6248337c7dbd';
+const SCOPES = ['https://graph.microsoft.com/Files.Read','https://graph.microsoft.com/Sites.Read.All'];
+
+let msalInstance;
+let allItems = [], filteredItems = [], selectedModels = new Set();
+
+window.addEventListener('load', async () => {
+  msalInstance = new msal.PublicClientApplication({
+    auth: {
+      clientId: CLIENT_ID,
+      authority: 'https://login.microsoftonline.com/' + TENANT_ID,
+      redirectUri: window.location.origin + window.location.pathname
+    },
+    cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
+  });
+  await msalInstance.initialize();
+
+  const redirectResult = await msalInstance.handleRedirectPromise();
+  document.getElementById('signInBtn').addEventListener('click', signIn);
+  loadSavedConfig();
+
+  if (redirectResult) { showMain(); autoLoad(); return; }
+
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) { showMain(); autoLoad(); }
+});
+
+async function signIn() {
+  try {
+    setStatus('Redirecting to sign-in…', 'loading');
+    await msalInstance.loginRedirect({ scopes: SCOPES });
+  } catch(e) {
+    setStatus('Sign-in failed: ' + e.message, 'error');
+  }
+}
+
+async function getToken() {
+  const accounts = msalInstance.getAllAccounts();
+  if (!accounts.length) throw new Error('Not signed in');
+  try {
+    const r = await msalInstance.acquireTokenSilent({ scopes: SCOPES, account: accounts[0] });
+    return r.accessToken;
+  } catch {
+    await msalInstance.acquireTokenRedirect({ scopes: SCOPES });
+    return null;
+  }
+}
+
+function showMain() {
+  document.getElementById('authSection').style.display = 'none';
+  document.getElementById('mainSection').style.display = 'flex';
+}
+
+function saveConfig() {
+  const cfg = {
+    siteUrl: document.getElementById('spSiteUrl').value.trim(),
+    filePath: document.getElementById('spFilePath').value.trim(),
+    colMapping: document.getElementById('colMapping').value.trim()
+  };
+  localStorage.setItem('quoteMobileConfig', JSON.stringify(cfg));
+  setStatus('Settings saved ✓', 'success');
+}
+
+function loadSavedConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('quoteMobileConfig') || '{}');
+    if (cfg.siteUrl) document.getElementById('spSiteUrl').value = cfg.siteUrl;
+    if (cfg.filePath) document.getElementById('spFilePath').value = cfg.filePath;
+    if (cfg.colMapping) document.getElementById('colMapping').value = cfg.colMapping;
+  } catch {}
+}
+
+function autoLoad() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('quoteMobileConfig') || '{}');
+    if (cfg.siteUrl && cfg.filePath) {
+      loadFromSharePoint();
+    } else {
+      // First run - use the pre-filled defaults already in the form
+      loadFromSharePoint();
+    }
+  } catch {
+    loadFromSharePoint();
+  }
+}
+
+function toggleConfig() {
+  document.getElementById('configPanel').classList.toggle('open');
+}
+
+async function loadFromSharePoint() {
+  const siteUrl = document.getElementById('spSiteUrl').value.trim();
+  const filePath = document.getElementById('spFilePath').value.trim();
+  const colMapping = document.getElementById('colMapping').value.trim();
+  if (!siteUrl || !filePath) { setStatus('Enter SharePoint URL and file path', 'error'); return; }
+  try {
+    setStatus('Connecting to SharePoint…', 'loading');
+    const token = await getToken();
+    if (!token) return;
+    const hostname = new URL(siteUrl).hostname;
+    const sitePath = new URL(siteUrl).pathname;
+    const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!siteRes.ok) throw new Error('SharePoint site not found');
+    const siteData = await siteRes.json();
+    setStatus('Locating file…', 'loading');
+    const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`, { headers: { Authorization: 'Bearer ' + token } });
+    const drivesData = await drivesRes.json();
+    if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found');
+    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
+    const fpParts = fp.split('/').filter(Boolean);
+    const driveHint = fpParts[0].toLowerCase();
+    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
+    if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
+    if (!drive) drive = drivesData.value[0];
+    const fileSuffix = '/' + fpParts.slice(1).join('/');
+    setStatus('Downloading price list…', 'loading');
+    const fileRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!fileRes.ok) throw new Error('File not found: ' + fileSuffix);
+    const fileData = await fileRes.json();
+    const contentRes = await fetch(fileData['@microsoft.graph.downloadUrl']);
+    const buffer = await contentRes.arrayBuffer();
+    parseExcel(buffer, colMapping);
+    saveConfig();
+    toggleConfig();
+  } catch(err) {
+    setStatus('Error: ' + err.message, 'error');
+  }
+}
+
+function parseExcel(buffer, colMapping) {
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const sheet = workbook.Sheets[workbook.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const [mCol, dCol, pCol] = colMapping.split(',').map(s => s.trim());
+  allItems = [];
+  for (const row of rows) {
+    const model = String(row[mCol] || '').trim();
+    const desc = String(row[dCol] || '').trim();
+    const price = parseFloat(String(row[pCol] || '').replace(/[$,\s]/g, ''));
+    if (model && !isNaN(price)) allItems.push({ model, desc, price });
+  }
+  selectedModels.clear();
+  filteredItems = [...allItems];
+  renderList();
+  setStatus(`✓ Loaded ${allItems.length} items`, 'success');
+}
+
+function filterItems() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  filteredItems = !q ? [...allItems] : allItems.filter(it => it.model.toLowerCase().includes(q) || it.desc.toLowerCase().includes(q));
+  renderList();
+}
+
+function renderList() {
+  const container = document.getElementById('itemContainer');
+  const emptyMsg = document.getElementById('emptyMsg');
+  container.querySelectorAll('.item-row').forEach(r => r.remove());
+  if (!filteredItems.length) {
+    emptyMsg.style.display = 'block';
+    emptyMsg.innerHTML = allItems.length ? 'No items match your search' : 'Tap ⚙ to set up your price list,<br>then it will load automatically.';
+    return;
+  }
+  emptyMsg.style.display = 'none';
+  const frag = document.createDocumentFragment();
+  for (const item of filteredItems) {
+    const sel = selectedModels.has(item.model);
+    const row = document.createElement('div');
+    row.className = 'item-row' + (sel ? ' selected' : '');
+    row.dataset.model = item.model;
+    row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model">${esc(item.model)}</div><div class="item-desc">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
+    row.addEventListener('click', () => toggleItem(item.model));
+    frag.appendChild(row);
+  }
+  container.appendChild(frag);
+  updateSelCount();
+}
+
+function toggleItem(model) {
+  selectedModels.has(model) ? selectedModels.delete(model) : selectedModels.add(model);
+  const row = document.querySelector(`.item-row[data-model="${CSS.escape(model)}"]`);
+  if (row) row.classList.toggle('selected', selectedModels.has(model));
+  updateSelCount();
+}
+
+function clearAll() {
+  selectedModels.clear();
+  document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
+  updateSelCount();
+}
+
+function updateSelCount() {
+  document.getElementById('selCount').textContent = selectedModels.size;
+  document.getElementById('viewQuoteBtn').disabled = selectedModels.size === 0;
+}
+
+function openQuoteSheet() {
+  const items = allItems.filter(it => selectedModels.has(it.model));
+  const tbody = document.getElementById('quoteTableBody');
+  tbody.innerHTML = items.map(it => `<tr><td style="font-weight:700;color:#1A2C44">${esc(it.model)}</td><td>${esc(it.desc||'')}</td><td style="text-align:right;font-weight:700">$${it.price.toFixed(2)}</td></tr>`).join('');
+  document.getElementById('quoteSheet').classList.add('open');
+}
+
+function closeQuoteSheet() {
+  document.getElementById('quoteSheet').classList.remove('open');
+}
+
+function buildPlainTextQuote(items) {
+  let text = 'MODEL\tDESCRIPTION\tNET PRICE\n';
+  text += items.map(it => `${it.model}\t${it.desc||''}\t$${it.price.toFixed(2)}`).join('\n');
+  return text;
+}
+
+function buildHtmlTable(items) {
+  const border = '1px solid #d0d0d0';
+  const rows = items.map(it => `<tr><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${esc(it.model)}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc||'')}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td></tr>`).join('');
+  return `<table style="border-collapse:collapse;width:100%;max-width:620px;font-family:Arial,sans-serif;margin:12px 0;border:${border}"><thead><tr style="background:#1A2C44"><th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap;border:1px solid #2a3c54">MODEL #</th><th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;border:1px solid #2a3c54">DESCRIPTION</th><th style="padding:10px 12px;text-align:right;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap;border:1px solid #2a3c54">NET PRICE</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+async function copyQuote() {
+  const items = allItems.filter(it => selectedModels.has(it.model));
+  if (!items.length) return;
+  const html = buildHtmlTable(items);
+  const plain = buildPlainTextQuote(items);
+  try {
+    if (navigator.clipboard && navigator.clipboard.write) {
+      const blobHtml = new Blob([html], { type: 'text/html' });
+      const blobText = new Blob([plain], { type: 'text/plain' });
+      const item = new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText });
+      await navigator.clipboard.write([item]);
+    } else {
+      await navigator.clipboard.writeText(plain);
+    }
+    setStatus(`✓ Copied ${items.length} item${items.length>1?'s':''} to clipboard`, 'success');
+    closeQuoteSheet();
+  } catch(e) {
+    const ta = document.getElementById('copyTarget');
+    ta.value = plain;
+    ta.style.left = '0';
+    ta.focus();
+    ta.select();
+    document.execCommand('copy');
+    ta.style.left = '-9999px';
+    setStatus(`✓ Copied as text (paste anywhere)`, 'success');
+    closeQuoteSheet();
+  }
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function setStatus(msg, type) { const b = document.getElementById('statusBar'); b.textContent = msg; b.className = 'status-bar ' + (type||'info'); setTimeout(()=>{ if(b.textContent===msg) b.textContent='';}, 4000); }
+</script>
+</body>
+</html>
