@@ -106,6 +106,7 @@
     <div class="search-wrap">
       <input type="text" id="searchInput" placeholder="Search model or description…" oninput="filterItems()"/>
     </div>
+    <button class="cfg-btn" onclick="loadFromSharePoint(true)" title="Refresh price list">↺</button>
     <button class="cfg-btn" onclick="toggleConfig()">⚙</button>
   </div>
   <div id="itemContainer">
@@ -249,47 +250,87 @@ function toggleConfig() {
   document.getElementById('configPanel').classList.toggle('open');
 }
 
-async function loadFromSharePoint() {
+async function loadFromSharePoint(forceRefresh = false) {
   const siteUrl = document.getElementById('spSiteUrl').value.trim();
   const filePath = document.getElementById('spFilePath').value.trim();
   const colMapping = document.getElementById('colMapping').value.trim();
   if (!siteUrl || !filePath) { setStatus('Enter SharePoint URL and file path', 'error'); return; }
+
+  // Check cache first
+  if (!forceRefresh) {
+    try {
+      const cached = JSON.parse(localStorage.getItem('quotePriceCache') || 'null');
+      if (cached && cached.items && cached.items.length > 0) {
+        allItems = cached.items;
+        filteredItems = [...allItems];
+        renderList();
+        setStatus(`✓ ${allItems.length} items loaded (cached) — checking for updates…`, 'success');
+        // Check for updates in background
+        checkForUpdates(siteUrl, filePath, colMapping, cached.lastModified);
+        return;
+      }
+    } catch(e) {}
+  }
+
   try {
-    setStatus('Connecting to SharePoint…', 'loading');
+    setStatus('Loading price list…', 'loading');
     const token = await getToken();
     if (!token) return;
-    const hostname = new URL(siteUrl).hostname;
-    const sitePath = new URL(siteUrl).pathname;
-    const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!siteRes.ok) throw new Error('SharePoint site not found');
-    const siteData = await siteRes.json();
-    setStatus('Locating file…', 'loading');
-    const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`, { headers: { Authorization: 'Bearer ' + token } });
-    const drivesData = await drivesRes.json();
-    if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found');
-    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
-    const fpParts = fp.split('/').filter(Boolean);
-    const driveHint = fpParts[0].toLowerCase();
-    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
-    if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
-    if (!drive) drive = drivesData.value[0];
-    const fileSuffix = '/' + fpParts.slice(1).join('/');
-    setStatus('Downloading price list…', 'loading');
+    const { drive, siteData, fileSuffix } = await resolveDrive(token, siteUrl, filePath);
     const fileRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`, { headers: { Authorization: 'Bearer ' + token } });
     if (!fileRes.ok) throw new Error('File not found: ' + fileSuffix);
     const fileData = await fileRes.json();
+    const lastModified = fileData.lastModifiedDateTime;
     const contentRes = await fetch(fileData['@microsoft.graph.downloadUrl']);
     const buffer = await contentRes.arrayBuffer();
-    parseExcel(buffer, colMapping);
+    parseExcel(buffer, colMapping, lastModified);
     saveConfig();
-    // Close config panel if it's open
     if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
   } catch(err) {
     setStatus('Error: ' + err.message, 'error');
   }
 }
 
-function parseExcel(buffer, colMapping) {
+async function checkForUpdates(siteUrl, filePath, colMapping, cachedLastModified) {
+  try {
+    const token = await getToken();
+    if (!token) return;
+    const { drive, siteData, fileSuffix } = await resolveDrive(token, siteUrl, filePath);
+    const fileRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`, { headers: { Authorization: 'Bearer ' + token } });
+    if (!fileRes.ok) return;
+    const fileData = await fileRes.json();
+    if (fileData.lastModifiedDateTime !== cachedLastModified) {
+      setStatus('Price list updated — refreshing…', 'loading');
+      const contentRes = await fetch(fileData['@microsoft.graph.downloadUrl']);
+      const buffer = await contentRes.arrayBuffer();
+      parseExcel(buffer, colMapping, fileData.lastModifiedDateTime);
+      setStatus(`✓ Price list updated — ${allItems.length} items`, 'success');
+    } else {
+      setStatus(`✓ ${allItems.length} items — price list is current`, 'success');
+    }
+  } catch(e) {}
+}
+
+async function resolveDrive(token, siteUrl, filePath) {
+  const hostname = new URL(siteUrl).hostname;
+  const sitePath = new URL(siteUrl).pathname;
+  const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
+  if (!siteRes.ok) throw new Error('SharePoint site not found');
+  const siteData = await siteRes.json();
+  const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`, { headers: { Authorization: 'Bearer ' + token } });
+  const drivesData = await drivesRes.json();
+  if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found');
+  const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
+  const fpParts = fp.split('/').filter(Boolean);
+  const driveHint = fpParts[0].toLowerCase();
+  let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
+  if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
+  if (!drive) drive = drivesData.value[0];
+  const fileSuffix = '/' + fpParts.slice(1).join('/');
+  return { drive, siteData, fileSuffix };
+}
+
+function parseExcel(buffer, colMapping, lastModified) {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
@@ -305,6 +346,10 @@ function parseExcel(buffer, colMapping) {
   filteredItems = [...allItems];
   renderList();
   setStatus(`✓ Loaded ${allItems.length} items`, 'success');
+  // Cache the items
+  try {
+    localStorage.setItem('quotePriceCache', JSON.stringify({ items: allItems, lastModified: lastModified || '' }));
+  } catch(e) {}
 }
 
 function filterItems() {
