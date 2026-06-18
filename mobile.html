@@ -241,17 +241,8 @@ function loadSavedConfig() {
 }
 
 function autoLoad() {
-  try {
-    const cfg = JSON.parse(localStorage.getItem('quoteMobileConfig') || '{}');
-    if (cfg.siteUrl && cfg.filePath) {
-      loadFromSharePoint();
-    } else {
-      // First run - use the pre-filled defaults already in the form
-      loadFromSharePoint();
-    }
-  } catch {
-    loadFromSharePoint();
-  }
+  // Always load immediately using either saved config or pre-filled defaults
+  loadFromSharePoint();
 }
 
 function toggleConfig() {
@@ -291,7 +282,8 @@ async function loadFromSharePoint() {
     const buffer = await contentRes.arrayBuffer();
     parseExcel(buffer, colMapping);
     saveConfig();
-    toggleConfig();
+    // Close config panel if it's open
+    if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
   } catch(err) {
     setStatus('Error: ' + err.message, 'error');
   }
