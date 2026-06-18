@@ -352,34 +352,75 @@ function parseExcel(buffer, colMapping, lastModified) {
   } catch(e) {}
 }
 
+let searchTimer;
 function filterItems() {
-  const q = document.getElementById('searchInput').value.toLowerCase().trim();
-  filteredItems = !q ? [...allItems] : allItems.filter(it => it.model.toLowerCase().includes(q) || it.desc.toLowerCase().includes(q));
-  renderList();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const q = document.getElementById('searchInput').value.toLowerCase().trim();
+    filteredItems = !q ? [...allItems] : allItems.filter(it => it.model.toLowerCase().includes(q) || it.desc.toLowerCase().includes(q));
+    renderList();
+  }, 200);
 }
+
+const ROW_HEIGHT = 62;
+const BUFFER = 10;
 
 function renderList() {
   const container = document.getElementById('itemContainer');
   const emptyMsg = document.getElementById('emptyMsg');
-  container.querySelectorAll('.item-row').forEach(r => r.remove());
+
   if (!filteredItems.length) {
+    container.innerHTML = '';
     emptyMsg.style.display = 'block';
     emptyMsg.innerHTML = allItems.length ? 'No items match your search' : 'Tap ⚙ to set up your price list,<br>then it will load automatically.';
+    container.appendChild(emptyMsg);
     return;
   }
   emptyMsg.style.display = 'none';
+
+  // Set up virtual scroll container
+  container.innerHTML = '';
+  container.appendChild(emptyMsg);
+
+  const totalHeight = filteredItems.length * ROW_HEIGHT;
+  const spacer = document.createElement('div');
+  spacer.style.height = totalHeight + 'px';
+  spacer.style.position = 'relative';
+  container.appendChild(spacer);
+
+  renderVisibleRows();
+  container.onscroll = renderVisibleRows;
+  updateSelCount();
+}
+
+function renderVisibleRows() {
+  const container = document.getElementById('itemContainer');
+  const spacer = container.querySelector('div[style*="relative"]');
+  if (!spacer) return;
+
+  // Remove old rows
+  spacer.querySelectorAll('.item-row').forEach(r => r.remove());
+
+  const scrollTop = container.scrollTop;
+  const viewHeight = container.clientHeight;
+  const startIdx = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER);
+  const endIdx = Math.min(filteredItems.length, Math.ceil((scrollTop + viewHeight) / ROW_HEIGHT) + BUFFER);
+
   const frag = document.createDocumentFragment();
-  for (const item of filteredItems) {
+  for (let i = startIdx; i < endIdx; i++) {
+    const item = filteredItems[i];
     const sel = selectedModels.has(item.model);
     const row = document.createElement('div');
     row.className = 'item-row' + (sel ? ' selected' : '');
     row.dataset.model = item.model;
+    row.style.position = 'absolute';
+    row.style.top = (i * ROW_HEIGHT) + 'px';
+    row.style.width = '100%';
     row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model">${esc(item.model)}</div><div class="item-desc">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
     row.addEventListener('click', () => toggleItem(item.model));
     frag.appendChild(row);
   }
-  container.appendChild(frag);
-  updateSelCount();
+  spacer.appendChild(frag);
 }
 
 function toggleItem(model) {
