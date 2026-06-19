@@ -338,7 +338,17 @@ function parseExcel(buffer, colMapping, lastModified) {
   const workbook = XLSX.read(buffer, { type: 'array' });
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-  const [mCol, dCol, pCol] = colMapping.split(',').map(s => s.trim());
+
+  // Build a map of trimmed-lowercase header -> actual header key, so whitespace/case differences don't break matching
+  const headerMap = {};
+  if (rows.length) {
+    Object.keys(rows[0]).forEach(k => { headerMap[k.trim().toLowerCase()] = k; });
+  }
+  const [mColRaw, dColRaw, pColRaw] = colMapping.split(',').map(s => s.trim());
+  const mCol = headerMap[mColRaw.toLowerCase()] || mColRaw;
+  const dCol = headerMap[dColRaw.toLowerCase()] || dColRaw;
+  const pCol = headerMap[pColRaw.toLowerCase()] || pColRaw;
+
   allItems = [];
   for (const row of rows) {
     const model = String(row[mCol] || '').trim();
