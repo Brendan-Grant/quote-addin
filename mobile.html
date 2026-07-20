@@ -348,13 +348,15 @@ function parseExcel(buffer, colMapping, lastModified) {
   const mCol = headerMap[mColRaw.toLowerCase()] || mColRaw;
   const dCol = headerMap[dColRaw.toLowerCase()] || dColRaw;
   const pCol = headerMap[pColRaw.toLowerCase()] || pColRaw;
+  const sCol = headerMap['submittal'] || 'Submittal';
 
   allItems = [];
   for (const row of rows) {
     const model = String(row[mCol] || '').trim();
     const desc = String(row[dCol] || '').trim();
     const price = parseFloat(String(row[pCol] || '').replace(/[$,\s]/g, ''));
-    if (model && !isNaN(price)) allItems.push({ model, desc, price });
+    const submittal = String(row[sCol] || '').trim();
+    if (model && !isNaN(price)) allItems.push({ model, desc, price, submittal });
   }
   selectedModels.clear();
   filteredItems = [...allItems];
@@ -430,7 +432,8 @@ function renderVisibleRows() {
     row.style.position = 'absolute';
     row.style.top = (i * ROW_HEIGHT) + 'px';
     row.style.width = '100%';
-    row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model">${esc(item.model)}</div><div class="item-desc">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
+    const sLink = item.submittal ? ` <a href="${esc(item.submittal)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0078D4;font-size:13px;text-decoration:none" title="View submittal">📄</a>` : '';
+    row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model">${esc(item.model)}${sLink}</div><div class="item-desc">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
     row.addEventListener('click', () => toggleItem(item.model));
     frag.appendChild(row);
   }
@@ -474,7 +477,12 @@ function buildPlainTextQuote(items) {
 
 function buildHtmlTable(items) {
   const border = '1px solid #d0d0d0';
-  const rows = items.map(it => `<tr><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${esc(it.model)}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc||'')}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td></tr>`).join('');
+  const rows = items.map(it => {
+    const modelCell = it.submittal
+      ? `<a href="${esc(it.submittal)}" style="color:#1A2C44;text-decoration:none;font-weight:700">${esc(it.model)}</a> <a href="${esc(it.submittal)}" style="color:#0078D4;font-size:11px;text-decoration:none">📄 Submittal</a>`
+      : esc(it.model);
+    return `<tr><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${modelCell}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc||'')}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td></tr>`;
+  }).join('');
   return `<table style="border-collapse:collapse;width:100%;max-width:620px;font-family:Arial,sans-serif;margin:12px 0;border:${border}"><thead><tr style="background:#1A2C44"><th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap;border:1px solid #2a3c54">MODEL #</th><th style="padding:10px 12px;text-align:left;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;border:1px solid #2a3c54">DESCRIPTION</th><th style="padding:10px 12px;text-align:right;color:#fff;font-size:12px;font-weight:700;letter-spacing:0.06em;white-space:nowrap;border:1px solid #2a3c54">NET PRICE</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
