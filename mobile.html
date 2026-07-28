@@ -95,7 +95,7 @@
 <div class="header">
   <img src="https://brendan-grant.github.io/quote-addin/Grant%26Associates%20transparent.jpg" alt="Grant & Associates" style="height:36px;border-radius:6px;background:#fff;padding:2px 6px"/>
   <div>
-    <div class="header-title">Grant Quote Builder</div>
+    <div class="header-title">Gulf South Quoting</div>
     <div class="header-sub">Tap items, then copy your quote</div>
   </div>
 </div>
@@ -479,7 +479,7 @@ function buildHtmlTable(items) {
   const border = '1px solid #d0d0d0';
   const rows = items.map(it => {
     const modelCell = it.submittal
-      ? `<a href="${esc(it.submittal)}" style="color:#1A2C44;text-decoration:none;font-weight:700">${esc(it.model)}</a> <a href="${esc(it.submittal)}" style="color:#0078D4;font-size:11px;text-decoration:none">📄 Submittal</a>`
+      ? `<a href="${esc(it.submittal)}" target="_blank" style="color:#1A2C44;text-decoration:underline;font-weight:700">${esc(it.model)}</a>`
       : esc(it.model);
     return `<tr><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${modelCell}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc||'')}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td></tr>`;
   }).join('');
