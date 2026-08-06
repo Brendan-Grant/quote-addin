@@ -297,10 +297,22 @@ function parseExcel(buffer, colMapping) {
   if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
 }
 
+let searchTimer;
 function filterItems() {
-  const q = document.getElementById('searchInput').value.toLowerCase().trim();
-  filteredItems = !q ? [...allItems] : allItems.filter(it => it.model.toLowerCase().includes(q) || it.desc.toLowerCase().includes(q));
-  renderList();
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    const raw = document.getElementById('searchInput').value.toLowerCase().trim();
+    if (!raw) {
+      filteredItems = [...allItems];
+    } else {
+      const words = raw.split(/\s+/).filter(Boolean);
+      filteredItems = allItems.filter(it => {
+        const haystack = (it.model + ' ' + it.desc).toLowerCase();
+        return words.every(w => haystack.includes(w));
+      });
+    }
+    renderList();
+  }, 200);
 }
 
 function renderList() {
