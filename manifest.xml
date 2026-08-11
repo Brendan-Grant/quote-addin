@@ -6,8 +6,8 @@
   <DefaultLocale>en-US</DefaultLocale>
   <DisplayName DefaultValue="Quote Builder"/>
   <Description DefaultValue="Select items from your price list and insert a formatted quote table into your email."/>
-  <IconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-64.png"/>
-  <HighResolutionIconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-128.png"/>
+  <IconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/icon-64.png"/>
+  <HighResolutionIconUrl DefaultValue="https://brendan-grant.github.io/quote-addin/icon-80.png"/>
   <SupportUrl DefaultValue="https://brendan-grant.github.io/quote-addin/"/>
   <AppDomains>
     <AppDomain>https://grantmail.sharepoint.com</AppDomain>
@@ -68,9 +68,9 @@
     </Hosts>
     <Resources>
       <bt:Images>
-        <bt:Image id="Icon.16x16" DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-16.png"/>
-        <bt:Image id="Icon.32x32" DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-32.png"/>
-        <bt:Image id="Icon.80x80" DefaultValue="https://brendan-grant.github.io/quote-addin/assets/icon-80.png"/>
+        <bt:Image id="Icon.16x16" DefaultValue="https://brendan-grant.github.io/quote-addin/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://brendan-grant.github.io/quote-addin/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://brendan-grant.github.io/quote-addin/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
         <bt:Url id="Commands.Url" DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/commands.html"/>
