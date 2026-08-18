@@ -177,7 +177,7 @@ const TENANT_ID = '2e5119eb-1ed3-4a64-87cd-6248337c7dbd';
 const SCOPES = ['https://graph.microsoft.com/Files.Read','https://graph.microsoft.com/Sites.Read.All'];
 
 let msalInstance;
-let allItems = [], filteredItems = [], selectedModels = new Set();
+let allItems = [], filteredItems = [], selectedModels = [], selectedSet = new Set();
 
 window.addEventListener('load', async () => {
   msalInstance = new msal.PublicClientApplication({
@@ -433,7 +433,7 @@ function renderVisibleRows() {
   const frag = document.createDocumentFragment();
   for (let i = startIdx; i < endIdx; i++) {
     const item = filteredItems[i];
-    const sel = selectedModels.has(item.model);
+    const sel = selectedSet.has(item.model);
     const row = document.createElement('div');
     row.className = 'item-row' + (sel ? ' selected' : '');
     row.dataset.model = item.model;
@@ -441,7 +441,8 @@ function renderVisibleRows() {
     row.style.top = (i * ROW_HEIGHT) + 'px';
     row.style.width = '100%';
     const sLink = item.submittal ? ` <a href="${esc(item.submittal)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0078D4;font-size:13px;text-decoration:none" title="View submittal">📄</a>` : '';
-    row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model">${esc(item.model)}${sLink}</div><div class="item-desc">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
+    const tooltip = `${esc(item.model)} — ${esc(item.desc)}`;
+    row.innerHTML = `<div class="item-check"></div><div class="item-text"><div class="item-model" title="${tooltip}">${esc(item.model)}${sLink}</div><div class="item-desc" title="${tooltip}">${esc(item.desc||'—')}</div></div><div class="item-price">$${item.price.toFixed(2)}</div>`;
     row.addEventListener('click', () => toggleItem(item.model));
     frag.appendChild(row);
   }
@@ -449,25 +450,32 @@ function renderVisibleRows() {
 }
 
 function toggleItem(model) {
-  selectedModels.has(model) ? selectedModels.delete(model) : selectedModels.add(model);
+  if (selectedSet.has(model)) {
+    selectedSet.delete(model);
+    selectedModels = selectedModels.filter(m => m !== model);
+  } else {
+    selectedSet.add(model);
+    selectedModels.push(model);
+  }
   const row = document.querySelector(`.item-row[data-model="${CSS.escape(model)}"]`);
-  if (row) row.classList.toggle('selected', selectedModels.has(model));
+  if (row) row.classList.toggle('selected', selectedSet.has(model));
   updateSelCount();
 }
 
 function clearAll() {
-  selectedModels.clear();
+  selectedModels = [];
+  selectedSet.clear();
   document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
   updateSelCount();
 }
 
 function updateSelCount() {
-  document.getElementById('selCount').textContent = selectedModels.size;
-  document.getElementById('viewQuoteBtn').disabled = selectedModels.size === 0;
+  document.getElementById('selCount').textContent = selectedModels.length;
+  document.getElementById('viewQuoteBtn').disabled = selectedModels.length === 0;
 }
 
 function openQuoteSheet() {
-  const items = allItems.filter(it => selectedModels.has(it.model));
+  const items = selectedModels.map(m => allItems.find(it => it.model === m)).filter(Boolean);
   const tbody = document.getElementById('quoteTableBody');
   tbody.innerHTML = items.map(it => `<tr><td style="font-weight:700;color:#1A2C44">${esc(it.model)}</td><td>${esc(it.desc||'')}</td><td style="text-align:right;font-weight:700">$${it.price.toFixed(2)}</td></tr>`).join('');
   document.getElementById('quoteSheet').classList.add('open');
@@ -495,7 +503,7 @@ function buildHtmlTable(items) {
 }
 
 async function copyQuote() {
-  const items = allItems.filter(it => selectedModels.has(it.model));
+  const items = selectedModels.map(m => allItems.find(it => it.model === m)).filter(Boolean);
   if (!items.length) return;
   const html = buildHtmlTable(items);
   const plain = buildPlainTextQuote(items);

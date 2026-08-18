@@ -125,7 +125,7 @@ const TENANT_ID = '2e5119eb-1ed3-4a64-87cd-6248337c7dbd';
 const SCOPES = ['https://graph.microsoft.com/Files.Read','https://graph.microsoft.com/Sites.Read.All'];
 
 let msalInstance;
-let allItems = [], filteredItems = [], selectedModels = new Set();
+let allItems = [], filteredItems = [], selectedModels = [], selectedSet = new Set();
 
 Office.onReady(async () => {
   msalInstance = new msal.PublicClientApplication({
@@ -323,12 +323,13 @@ function renderList() {
   emptyMsg.style.display = 'none';
   const frag = document.createDocumentFragment();
   for (const item of filteredItems) {
-    const sel = selectedModels.has(item.model);
+    const sel = selectedSet.has(item.model);
     const row = document.createElement('div');
     row.className = 'item-row' + (sel ? ' selected' : '');
     row.dataset.model = item.model;
     const sLink = item.submittal ? ` <a href="${esc(item.submittal)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:#0078D4;font-size:11px;text-decoration:none" title="View submittal">📄</a>` : '';
-    row.innerHTML = `<div class="item-check"></div><div class="item-model" title="${esc(item.model)}">${esc(item.model)}${sLink}</div><div class="item-desc" title="${esc(item.desc)}">${esc(item.desc||'—')}</div><div class="item-price">$${item.price.toFixed(2)}</div>`;
+    const tooltip = `${esc(item.model)} — ${esc(item.desc)}`;
+    row.innerHTML = `<div class="item-check"></div><div class="item-model" title="${tooltip}">${esc(item.model)}${sLink}</div><div class="item-desc" title="${tooltip}">${esc(item.desc||'—')}</div><div class="item-price">$${item.price.toFixed(2)}</div>`;
     row.addEventListener('click', () => toggleItem(item.model));
     frag.appendChild(row);
   }
@@ -337,21 +338,28 @@ function renderList() {
 }
 
 function toggleItem(model) {
-  selectedModels.has(model) ? selectedModels.delete(model) : selectedModels.add(model);
+  if (selectedSet.has(model)) {
+    selectedSet.delete(model);
+    selectedModels = selectedModels.filter(m => m !== model);
+  } else {
+    selectedSet.add(model);
+    selectedModels.push(model);
+  }
   const row = document.querySelector(`.item-row[data-model="${CSS.escape(model)}"]`);
-  if (row) row.classList.toggle('selected', selectedModels.has(model));
+  if (row) row.classList.toggle('selected', selectedSet.has(model));
   updateSelCount();
 }
 
 function clearAll() {
-  selectedModels.clear();
+  selectedModels = [];
+  selectedSet.clear();
   document.querySelectorAll('.item-row.selected').forEach(r => r.classList.remove('selected'));
   updateSelCount();
 }
 
 function updateSelCount() {
-  document.getElementById('selCount').textContent = selectedModels.size;
-  document.getElementById('insertBtn').disabled = selectedModels.size === 0;
+  document.getElementById('selCount').textContent = selectedModels.length;
+  document.getElementById('insertBtn').disabled = selectedModels.length === 0;
 }
 
 function buildHtmlTable(items) {
@@ -379,7 +387,7 @@ function buildHtmlTable(items) {
 }
 
 function insertQuote() {
-  const items = allItems.filter(it => selectedModels.has(it.model));
+  const items = selectedModels.map(m => allItems.find(it => it.model === m)).filter(Boolean);
   if (!items.length) return;
   const tableHtml = buildHtmlTable(items);
   setStatus('Inserting into email…', 'loading');
