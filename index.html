@@ -289,7 +289,7 @@ function parseExcel(buffer, colMapping) {
     const submittal = String(row[sCol] || '').trim();
     if (model && !isNaN(price)) allItems.push({ model, desc, price, submittal });
   }
-  selectedModels.clear();
+  selectedModels = []; selectedSet.clear();
   filteredItems = [...allItems];
   renderList();
   document.getElementById('fileLabel').textContent = `${allItems.length} items loaded`;
