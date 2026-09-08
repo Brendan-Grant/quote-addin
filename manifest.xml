@@ -73,7 +73,7 @@
         <bt:Image id="Icon.80x80" DefaultValue="https://brendan-grant.github.io/quote-addin/icon-80.png"/>
       </bt:Images>
       <bt:Urls>
-        <bt:Url id="Commands.Url" DefaultValue="https://grantmail.sharepoint.com/sites/inside/Shared%20Documents/Quote-Addin/commands.html"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://brendan-grant.github.io/quote-addin/commands.html"/>
         <bt:Url id="Taskpane.Url" DefaultValue="https://brendan-grant.github.io/quote-addin/"/>
       </bt:Urls>
       <bt:ShortStrings>
