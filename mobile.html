@@ -495,7 +495,7 @@ function buildHtmlTable(items) {
   const border = '1px solid #d0d0d0';
   const rows = items.map(it => {
     const modelCell = it.submittal
-      ? `<a href="${esc(it.submittal)}" target="_blank" style="color:#1A2C44;text-decoration:underline;font-weight:700">${esc(it.model)}</a>`
+      ? `<a href="${esc(it.submittal)}" target="_blank" style="color:#1A2C44;text-decoration:underline;font-weight:700">${esc(it.model)}</a><br><a href="${esc(it.submittal)}" target="_blank" style="color:#0078D4;text-decoration:underline;font-size:10px;font-weight:400">Click for submittal</a>`
       : esc(it.model);
     return `<tr><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${modelCell}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;color:#323130">${esc(it.desc||'')}</td><td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;text-align:right;white-space:nowrap;color:#323130">$${it.price.toFixed(2)}</td></tr>`;
   }).join('');

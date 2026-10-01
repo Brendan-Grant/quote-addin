@@ -6,7 +6,6 @@
   <title>Quote Builder</title>
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.10.0/lib/msal-browser.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:"Segoe UI",sans-serif;font-size:13px;color:#323130;background:#faf9f8;display:flex;flex-direction:column;height:100vh;overflow:hidden}
@@ -64,7 +63,7 @@
 <body>
 
 <div class="header">
-  <img src="https://brendan-grant.github.io/quote-addin/Grant%26Associates%20transparent.jpg" alt="Grant & Associates" style="height:32px;border-radius:4px;background:#fff;padding:2px 4px"/>
+  <img src="https://brendan-grant.github.io/quote-addin/logo-small.jpg" alt="Grant & Associates" style="height:32px;border-radius:4px;background:#fff;padding:2px 4px"/>
   <div>
     <div class="header-title">Gulf South Quoting</div>
     <div class="header-sub">Select items → insert into email</div>
@@ -128,6 +127,18 @@ let msalInstance;
 let allItems = [], filteredItems = [], selectedModels = [], selectedSet = new Set();
 
 Office.onReady(async () => {
+  loadSavedConfig();
+  // 1) Show the cached price list immediately — no network needed
+  const cached = await cacheGet();
+  if (cached && cached.items && cached.items.length) {
+    allItems = cached.items;
+    filteredItems = [...allItems];
+    showMain();
+    renderList();
+    document.getElementById('fileLabel').textContent = `${allItems.length} items`;
+    setStatus('Checking for price list updates…', 'loading');
+  }
+  // 2) Sign in and refresh in the background
   msalInstance = new msal.PublicClientApplication({
     auth: {
       clientId: CLIENT_ID,
@@ -137,7 +148,6 @@ Office.onReady(async () => {
     cache: { cacheLocation: 'localStorage', storeAuthStateInCookie: true }
   });
   await msalInstance.initialize();
-  loadSavedConfig();
 
   // Try silent sign-in first
   const accounts = msalInstance.getAllAccounts();
@@ -160,6 +170,7 @@ Office.onReady(async () => {
       if (result) { showMain(); autoLoad(); }
     } catch(e2) {
       setAuthMsg('Sign-in failed: ' + e2.message);
+      if (allItems.length) setStatus('Using saved price list (not signed in, so updates were not checked)', 'info');
     }
   }
 });
@@ -219,7 +230,7 @@ function loadSavedConfig() {
 function autoLoad() {
   try {
     const cfg = JSON.parse(localStorage.getItem('quoteAddinConfig') || '{}');
-    if (cfg.siteUrl && cfg.filePath) loadFromSharePoint();
+    if (cfg.siteUrl && cfg.filePath) loadFromSharePoint(false);
     else toggleConfig();
   } catch { toggleConfig(); }
 }
@@ -228,41 +239,108 @@ function toggleConfig() {
   document.getElementById('configPanel').classList.toggle('open');
 }
 
-async function loadFromSharePoint() {
+// ---------- Local cache (IndexedDB) ----------
+const DB_NAME = 'quoteBuilderCache', STORE = 'kv', CACHE_KEY = 'priceList';
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open(DB_NAME, 1);
+    r.onupgradeneeded = () => r.result.createObjectStore(STORE);
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function cacheGet() {
+  try {
+    const db = await idb();
+    return await new Promise(res => {
+      const q = db.transaction(STORE).objectStore(STORE).get(CACHE_KEY);
+      q.onsuccess = () => res(q.result || null);
+      q.onerror = () => res(null);
+    });
+  } catch { return null; }
+}
+async function cacheSet(val) {
+  try {
+    const db = await idb();
+    db.transaction(STORE, 'readwrite').objectStore(STORE).put(val, CACHE_KEY);
+  } catch {}
+}
+
+// Excel parser is only downloaded when the price file has actually changed
+let xlsxLoading;
+function loadXlsxLib() {
+  if (window.XLSX) return Promise.resolve();
+  if (!xlsxLoading) xlsxLoading = new Promise((res, rej) => {
+    const sc = document.createElement('script');
+    sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+    sc.onload = res; sc.onerror = () => rej(new Error('Could not load Excel parser'));
+    document.head.appendChild(sc);
+  });
+  return xlsxLoading;
+}
+
+// force = true when the user clicks "Load price list" (always re-download)
+async function loadFromSharePoint(force = true) {
   const siteUrl = document.getElementById('spSiteUrl').value.trim();
   const filePath = document.getElementById('spFilePath').value.trim();
   const colMapping = document.getElementById('colMapping').value.trim();
   if (!siteUrl || !filePath) { setStatus('Please enter SharePoint URL and file path', 'error'); return; }
+  const hasCache = allItems.length > 0;
   try {
-    setStatus('Connecting to SharePoint…', 'loading');
+    if (!hasCache) setStatus('Connecting to SharePoint…', 'loading');
     const token = await getToken();
     if (!token) return;
-    const hostname = new URL(siteUrl).hostname;
-    const sitePath = new URL(siteUrl).pathname;
-    const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!siteRes.ok) throw new Error('SharePoint site not found');
-    const siteData = await siteRes.json();
-    setStatus('Locating file…', 'loading');
-    const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`, { headers: { Authorization: 'Bearer ' + token } });
-    const drivesData = await drivesRes.json();
-    if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found');
-    const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
-    const fpParts = fp.split('/').filter(Boolean);
-    const driveHint = fpParts[0].toLowerCase();
-    let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
-    if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
-    if (!drive) drive = drivesData.value[0];
-    const fileSuffix = '/' + fpParts.slice(1).join('/');
-    setStatus('Downloading price list…', 'loading');
-    const fileRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives/${drive.id}/root:${fileSuffix}`, { headers: { Authorization: 'Bearer ' + token } });
-    if (!fileRes.ok) throw new Error('File not found: ' + fileSuffix);
-    const fileData = await fileRes.json();
-    const contentRes = await fetch(fileData['@microsoft.graph.downloadUrl']);
+    const auth = { headers: { Authorization: 'Bearer ' + token } };
+    const cached = await cacheGet();
+    const sameSource = cached && cached.siteUrl === siteUrl && cached.filePath === filePath && cached.colMapping === colMapping;
+
+    // Fast path: we already know where the file lives — one small metadata call
+    let fileData = null, driveId = null;
+    if (sameSource && cached.driveId && cached.itemId) {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/drives/${cached.driveId}/items/${cached.itemId}`, auth);
+      if (r.ok) { fileData = await r.json(); driveId = cached.driveId; }
+    }
+
+    // Slow path (first run or file moved): look up site → library → file
+    if (!fileData) {
+      const hostname = new URL(siteUrl).hostname;
+      const sitePath = new URL(siteUrl).pathname;
+      const siteRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${hostname}:${sitePath}`, auth);
+      if (!siteRes.ok) throw new Error('SharePoint site not found');
+      const siteData = await siteRes.json();
+      if (!hasCache) setStatus('Locating file…', 'loading');
+      const drivesRes = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteData.id}/drives`, auth);
+      const drivesData = await drivesRes.json();
+      if (!drivesData.value || !drivesData.value.length) throw new Error('No document libraries found');
+      const fp = filePath.startsWith('/') ? filePath : '/' + filePath;
+      const fpParts = fp.split('/').filter(Boolean);
+      const driveHint = fpParts[0].toLowerCase();
+      let drive = drivesData.value.find(d => d.name.toLowerCase() === driveHint);
+      if (!drive) drive = drivesData.value.find(d => d.name.toLowerCase().includes('document'));
+      if (!drive) drive = drivesData.value[0];
+      const fileSuffix = '/' + fpParts.slice(1).join('/');
+      const fileRes = await fetch(`https://graph.microsoft.com/v1.0/drives/${drive.id}/root:${fileSuffix}`, auth);
+      if (!fileRes.ok) throw new Error('File not found: ' + fileSuffix);
+      fileData = await fileRes.json();
+      driveId = drive.id;
+    }
+
+    // Unchanged since last download? Keep the cached list and stop here.
+    const version = fileData.cTag || fileData.eTag || fileData.lastModifiedDateTime;
+    if (!force && sameSource && cached.version === version && hasCache) {
+      setStatus(`✓ Price list up to date (${allItems.length} items)`, 'success');
+      return;
+    }
+
+    setStatus(hasCache ? 'Price list changed — updating…' : 'Downloading price list…', 'loading');
+    const [contentRes] = await Promise.all([fetch(fileData['@microsoft.graph.downloadUrl']), loadXlsxLib()]);
     const buffer = await contentRes.arrayBuffer();
-    parseExcel(buffer, colMapping);
     saveConfig();
+    parseExcel(buffer, colMapping);
+    cacheSet({ siteUrl, filePath, colMapping, driveId, itemId: fileData.id, version, items: allItems, savedAt: Date.now() });
   } catch(err) {
-    setStatus('Error: ' + err.message, 'error');
+    if (hasCache) setStatus('Using saved price list (could not check for updates: ' + err.message + ')', 'info');
+    else setStatus('Error: ' + err.message, 'error');
   }
 }
 
@@ -289,9 +367,10 @@ function parseExcel(buffer, colMapping) {
     const submittal = String(row[sCol] || '').trim();
     if (model && !isNaN(price)) allItems.push({ model, desc, price, submittal });
   }
-  selectedModels = []; selectedSet.clear();
-  filteredItems = [...allItems];
-  renderList();
+  const models = new Set(allItems.map(i => i.model));
+  selectedModels = selectedModels.filter(m => models.has(m));
+  selectedSet = new Set(selectedModels);
+  applyFilter();
   document.getElementById('fileLabel').textContent = `${allItems.length} items loaded`;
   setStatus(`✓ Loaded ${allItems.length} items from SharePoint`, 'success');
   if (document.getElementById('configPanel').classList.contains('open')) toggleConfig();
@@ -300,7 +379,9 @@ function parseExcel(buffer, colMapping) {
 let searchTimer;
 function filterItems() {
   clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
+  searchTimer = setTimeout(applyFilter, 200);
+}
+function applyFilter() {
     const raw = document.getElementById('searchInput').value.toLowerCase().trim();
     if (!raw) {
       filteredItems = [...allItems];
@@ -312,7 +393,6 @@ function filterItems() {
       });
     }
     renderList();
-  }, 200);
 }
 
 function renderList() {
@@ -322,7 +402,9 @@ function renderList() {
   if (!filteredItems.length) { emptyMsg.style.display = 'block'; return; }
   emptyMsg.style.display = 'none';
   const frag = document.createDocumentFragment();
-  for (const item of filteredItems) {
+  const MAX_ROWS = 300;
+  container.querySelectorAll('.more-msg').forEach(r => r.remove());
+  for (const item of filteredItems.slice(0, MAX_ROWS)) {
     const sel = selectedSet.has(item.model);
     const row = document.createElement('div');
     row.className = 'item-row' + (sel ? ' selected' : '');
@@ -332,6 +414,13 @@ function renderList() {
     row.innerHTML = `<div class="item-check"></div><div class="item-model" title="${tooltip}">${esc(item.model)}${sLink}</div><div class="item-desc" title="${tooltip}">${esc(item.desc||'—')}</div><div class="item-price">$${item.price.toFixed(2)}</div>`;
     row.addEventListener('click', () => toggleItem(item.model));
     frag.appendChild(row);
+  }
+  if (filteredItems.length > MAX_ROWS) {
+    const more = document.createElement('div');
+    more.className = 'empty-msg more-msg item-row';
+    more.style.display = 'block'; more.style.cursor = 'default';
+    more.textContent = `Showing ${MAX_ROWS} of ${filteredItems.length} — type in search to narrow the list`;
+    frag.appendChild(more);
   }
   container.appendChild(frag);
   updateSelCount();
@@ -366,7 +455,7 @@ function buildHtmlTable(items) {
   const border = '1px solid #d0d0d0';
   const rows = items.map(it => {
     const modelCell = it.submittal
-      ? `<a href="${esc(it.submittal)}" target="_blank" style="color:#1A2C44;text-decoration:underline;font-weight:700">${esc(it.model)}</a>`
+      ? `<a href="${esc(it.submittal)}" target="_blank" style="color:#1A2C44;text-decoration:underline;font-weight:700">${esc(it.model)}</a><br><a href="${esc(it.submittal)}" target="_blank" style="color:#0078D4;text-decoration:underline;font-size:10px;font-weight:400">Click for submittal</a>`
       : `${esc(it.model)}`;
     return `<tr>
     <td style="padding:8px 12px;border:${border};font-family:Arial,sans-serif;font-size:13px;font-weight:700;color:#1A2C44;white-space:nowrap">${modelCell}</td>
